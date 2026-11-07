@@ -19,7 +19,7 @@ from torch.optim.lr_scheduler import *
 def train_net(cfg):
     torch.backends.cudnn.benchmark = True
 
-    ViPC_train = ViPCDataLoader(r'/project/EGIInet/train_list.txt',
+    ViPC_train = ViPCDataLoader(r'/data16t/yzj/projects/EGIInet/train_list.txt',
                                  data_path=cfg.DATASETS.SHAPENET.VIPC_PATH, status='train',
                                  view_align=False, category=cfg.TRAIN.CATE)
     train_data_loader = DataLoader(ViPC_train,
@@ -29,7 +29,7 @@ def train_net(cfg):
                               drop_last=True,
                               prefetch_factor=cfg.CONST.DATA_perfetch)
 
-    ViPC_test = ViPCDataLoader(r'/project/EGIInet/test_list.txt',
+    ViPC_test = ViPCDataLoader(r'/data16t/yzj/projects/EGIInet/test_list.txt',
                                 data_path=cfg.DATASETS.SHAPENET.VIPC_PATH, status='test',
                                 view_align=False, category=cfg.TRAIN.CATE)
     val_data_loader = DataLoader(ViPC_test,

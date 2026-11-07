@@ -18,7 +18,7 @@ def test_net(cfg, epoch_idx=-1, test_data_loader=None, test_writer=None, model=N
     if test_data_loader is None:
         # Set up data loader
 
-        ViPC_test = ViPCDataLoader(r'/project/EGIInet/test_list.txt',
+        ViPC_test = ViPCDataLoader(r'/data16t/yzj/projects/EGIInet/test_list.txt',
                                    data_path=cfg.DATASETS.SHAPENET.VIPC_PATH,
                                    status='test',
                                    view_align=False, category=cfg.TEST.CATE)
