@@ -2,7 +2,8 @@ import numpy as np
 #from deformable_attention import DeformableAttention1D
 from torch import nn
 
-from models.dec_net import Decoder_Network
+from models.flow_matching import (LatentFlowMatching, MissingSetEncoder,
+                                  MissingSetDecoder, missing_region)
 import torch
 from torch.nn import Module
 from models.encoders import  transfer_loss_shared_encoder
@@ -27,12 +28,31 @@ class EGIInet(Module):
                                                pc_h_hidden_dim=cfg.NETWORK.shared_encoder.pc_h_hidden_dim,
                                                fuse_layer_num=fuse_layer_num,
                                                )
-        self.decoder=Decoder_Network(K1=embed_dim,K2=embed_dim,N=embed_dim)
+        flow = cfg.NETWORK.FLOW
+        self.target_encoder = MissingSetEncoder(embed_dim, flow.LATENT_TOKENS, flow.HEADS)
+        self.flow = LatentFlowMatching(embed_dim, flow.LATENT_TOKENS, flow.HEADS, flow.DEPTH)
+        self.decoder = MissingSetDecoder(embed_dim, flow.LATENT_TOKENS, flow.MISSING_POINTS)
+        self.missing_points = flow.MISSING_POINTS
+        self.train_steps = flow.TRAIN_STEPS
+        self.sample_steps = flow.SAMPLE_STEPS
 
-    def forward(self,pc,img):
-        feature, _, _, style_loss = self.encoder(pc=pc, im=img)
-        final = self.decoder(feature, pc)
-        return final,style_loss
+    def forward(self, pc, img, gt=None, return_details=False, noise=None):
+        point_tokens, image_tokens, _, style_loss = self.encoder(pc=pc, im=img)
+        condition = self.flow.condition(point_tokens, image_tokens)
+        steps = self.train_steps if self.training else self.sample_steps
+        generated = self.flow.sample(condition, steps, noise=noise)
+        missing = self.decoder(generated)
+        complete = torch.cat((pc, missing), dim=1)
+        details = {'style': style_loss, 'missing': missing}
+        if gt is not None:
+            target_points = missing_region(pc, gt, self.missing_points)
+            target = self.target_encoder(target_points)
+            details.update(flow=self.flow.loss(target, condition),
+                           target_missing=target_points,
+                           target_reconstruction=self.decoder(target))
+        if return_details:
+            return complete, details
+        return complete, style_loss
 
 if __name__ == '__main__':
     import time
@@ -43,7 +63,7 @@ if __name__ == '__main__':
     fine = model(pc, img)
     e=time.time()
     print(e-s)
-    print(fine.shape)
+    print(fine[0].shape)
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     parameters = sum([np.prod(p.size()) for p in model_parameters])
     print(f"n parameters:{parameters}")

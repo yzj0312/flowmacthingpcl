@@ -60,3 +60,21 @@ __C.TEST.METRIC_NAME                             = 'ChamferDistance'
 __C.TEST.CATE                                    = 'plane'
 __C.TEST.BATCH_SIZE                              = 8
 __C.CONST.WEIGHTS = r"/data16t/yzj/datasets/EGIInet-checkpoints/plane-ckpt-best.pth"
+
+# Conditional latent flow: 1024 observed + 1024 generated = 2048 points.
+__C.NETWORK.FLOW = edict()
+__C.NETWORK.FLOW.PARTIAL_POINTS = 1024
+__C.NETWORK.FLOW.MISSING_POINTS = 1024
+__C.NETWORK.FLOW.LATENT_TOKENS = 64
+__C.NETWORK.FLOW.HEADS = 6
+__C.NETWORK.FLOW.DEPTH = 3
+__C.NETWORK.FLOW.TRAIN_STEPS = 4
+__C.NETWORK.FLOW.SAMPLE_STEPS = 16
+__C.TRAIN.FLOW_WEIGHT = 1.0
+__C.TRAIN.MISSING_WEIGHT = 1.0
+__C.TRAIN.AUTOENCODER_WEIGHT = 1.0
+__C.TRAIN.STYLE_WEIGHT = 0.01
+# Resume only checkpoints produced by the new architecture.
+__C.TRAIN.RESUME = None
+__C.DATASETS.SHAPENET.TRAIN_LIST = 'train_list.txt'
+__C.DATASETS.SHAPENET.TEST_LIST = 'test_list.txt'

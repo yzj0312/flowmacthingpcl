@@ -19,7 +19,7 @@ from torch.optim.lr_scheduler import *
 def train_net(cfg):
     torch.backends.cudnn.benchmark = True
 
-    ViPC_train = ViPCDataLoader(r'/data16t/yzj/projects/EGIInet/train_list.txt',
+    ViPC_train = ViPCDataLoader(cfg.DATASETS.SHAPENET.TRAIN_LIST,
                                  data_path=cfg.DATASETS.SHAPENET.VIPC_PATH, status='train',
                                  view_align=False, category=cfg.TRAIN.CATE)
     train_data_loader = DataLoader(ViPC_train,
@@ -29,7 +29,7 @@ def train_net(cfg):
                               drop_last=True,
                               prefetch_factor=cfg.CONST.DATA_perfetch)
 
-    ViPC_test = ViPCDataLoader(r'/data16t/yzj/projects/EGIInet/test_list.txt',
+    ViPC_test = ViPCDataLoader(cfg.DATASETS.SHAPENET.TEST_LIST,
                                 data_path=cfg.DATASETS.SHAPENET.VIPC_PATH, status='test',
                                 view_align=False, category=cfg.TRAIN.CATE)
     val_data_loader = DataLoader(ViPC_test,
@@ -72,11 +72,12 @@ def train_net(cfg):
     steps = 0
     BestEpoch = 0
 
-    if 'WEIGHTS' in cfg.CONST:
-        logging.info('Recovering from %s ...' % (cfg.CONST.WEIGHTS))
-        checkpoint = torch.load(cfg.CONST.WEIGHTS)
+    if cfg.TRAIN.RESUME:
+        logging.info('Recovering from %s ...' % (cfg.TRAIN.RESUME))
+        checkpoint = torch.load(cfg.TRAIN.RESUME)
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
+        init_epoch = checkpoint.get('epoch', 0)
         steps = cfg.TRAIN.WARMUP_STEPS+1
         lr_scheduler = MultiStepLR(optimizer,milestones=cfg.TRAIN.LR_DECAY_STEP, gamma=cfg.TRAIN.GAMMA)
         optimizer.param_groups[0]['lr']= cfg.TRAIN.LEARNING_RATE
@@ -91,6 +92,9 @@ def train_net(cfg):
 
         total_cd_pc = 0
         total_style = 0
+        total_flow = 0
+        total_missing = 0
+        total_autoencoder = 0
         total_loss = 0
 
         n_batches = len(train_data_loader)
@@ -101,12 +105,19 @@ def train_net(cfg):
                 partial = part_pc.cuda()#[16,2048,3]
                 gt = gt_pc.cuda()#[16,2048,3]
                 png = view.cuda()
-                partial = farthest_point_sample(partial,cfg.DATASETS.SHAPENET.N_POINTS)
+                partial = farthest_point_sample(partial,cfg.NETWORK.FLOW.PARTIAL_POINTS)
                 gt = farthest_point_sample(gt,cfg.DATASETS.SHAPENET.N_POINTS)
                       
-                recon,style_loss=model(partial,png)
-                cd = chamfer_sqrt(recon,gt)
-                loss_total=cd+style_loss*1e-2
+                recon, details = model(partial, png, gt=gt, return_details=True)
+                style_loss = details['style'].mean()
+                flow_loss = details['flow'].mean()
+                cd = chamfer_sqrt(recon, gt)
+                missing_loss = chamfer_sqrt(details['missing'], details['target_missing'])
+                autoencoder_loss = chamfer_sqrt(details['target_reconstruction'], details['target_missing'])
+                loss_total = (cd + cfg.TRAIN.STYLE_WEIGHT * style_loss
+                              + cfg.TRAIN.FLOW_WEIGHT * flow_loss
+                              + cfg.TRAIN.MISSING_WEIGHT * missing_loss
+                              + cfg.TRAIN.AUTOENCODER_WEIGHT * autoencoder_loss)
                 optimizer.zero_grad()
                 loss_total.backward()
                 optimizer.step()
@@ -120,6 +131,12 @@ def train_net(cfg):
                 n_itr = (epoch_idx - 1) * n_batches + batch_idx
                 train_writer.add_scalar('Loss/Batch/cd_pc', cd_pc_item, n_itr)
                 train_writer.add_scalar('Loss/Batch/style', style_item, n_itr)
+                total_flow += flow_loss.item()
+                total_missing += missing_loss.item()
+                total_autoencoder += autoencoder_loss.item()
+                train_writer.add_scalar('Loss/Batch/flow', flow_loss.item(), n_itr)
+                train_writer.add_scalar('Loss/Batch/missing', missing_loss.item(), n_itr)
+                train_writer.add_scalar('Loss/Batch/autoencoder', autoencoder_loss.item(), n_itr)
                 train_writer.add_scalar('Loss/Batch/loss', loss_item, n_itr)
                 t.set_description(
                     '[Epoch %d/%d][Batch %d/%d]' % (epoch_idx, cfg.TRAIN.N_EPOCHS, batch_idx + 1, n_batches))
@@ -133,6 +150,9 @@ def train_net(cfg):
         avg_loss = total_loss / n_batches
 
         lr_scheduler.step()
+        train_writer.add_scalar('Loss/Epoch/flow', total_flow / n_batches, epoch_idx)
+        train_writer.add_scalar('Loss/Epoch/missing', total_missing / n_batches, epoch_idx)
+        train_writer.add_scalar('Loss/Epoch/autoencoder', total_autoencoder / n_batches, epoch_idx)
         train_writer.add_scalar('Loss/Epoch/cd_pc', avg_cdc, epoch_idx)
         train_writer.add_scalar('Loss/Epoch/style', avg_style, epoch_idx)
         train_writer.add_scalar('Loss/Epoch/loss', avg_loss, epoch_idx)
@@ -155,7 +175,9 @@ def train_net(cfg):
             output_path = os.path.join(cfg.DIR.CHECKPOINTS, file_name)
             torch.save({
                 'model': model.state_dict(),
-                'optimizer': optimizer.state_dict()
+                'optimizer': optimizer.state_dict(),
+                'architecture': 'conditional_latent_flow_v1',
+                'epoch': epoch_idx
             }, output_path)
 
             logging.info('Saved checkpoint to %s ...' % output_path)

@@ -233,7 +233,7 @@ class transfer_loss_shared_encoder(nn.Module):
             im_f_list.append(im_f)
         pc_f=self.pc_norm(pc_f)
         im_f=self.im_norm(im_f)
-        x, _ = self.cross_layer(pc_f, im_f, pc_f)
+        x, _ = self.cross_layer(pc_f, im_f, im_f)
         pc_f=self.cross_norm(pc_f+x)
 
         if self.fuse_layer_num==0:

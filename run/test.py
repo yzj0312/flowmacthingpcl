@@ -18,7 +18,7 @@ def test_net(cfg, epoch_idx=-1, test_data_loader=None, test_writer=None, model=N
     if test_data_loader is None:
         # Set up data loader
 
-        ViPC_test = ViPCDataLoader(r'/data16t/yzj/projects/EGIInet/test_list.txt',
+        ViPC_test = ViPCDataLoader(cfg.DATASETS.SHAPENET.TEST_LIST,
                                    data_path=cfg.DATASETS.SHAPENET.VIPC_PATH,
                                    status='test',
                                    view_align=False, category=cfg.TEST.CATE)
@@ -57,7 +57,7 @@ def test_net(cfg, epoch_idx=-1, test_data_loader=None, test_writer=None, model=N
                 partial = part_pc.cuda()  # [16,2048,3]
                 gt = gt_pc.cuda()  # [16,2048,3]
                 png = view.cuda()
-                partial = farthest_point_sample(partial,cfg.DATASETS.SHAPENET.N_POINTS)
+                partial = farthest_point_sample(partial,cfg.NETWORK.FLOW.PARTIAL_POINTS)
                 gt = farthest_point_sample(gt,cfg.DATASETS.SHAPENET.N_POINTS)
 
                 model.eval()
