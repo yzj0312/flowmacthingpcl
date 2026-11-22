@@ -20,19 +20,19 @@ __C.CONST.DATA_perfetch                          = 2
 # Directories
 #
 __C.DIR                                          = edict()
-__C.DIR.OUT_PATH                                 = '/data16t/yzj/outputs/EGIInet'#path to save checkpoints and logs
+__C.DIR.OUT_PATH                                 = '/data16t/yzj/outputs/latent_completion'#path to save checkpoints and logs
 __C.CONST.DEVICE                                 = '0'
 #
 # Network
 #
 __C.NETWORK                                      = edict()
-__C.NETWORK.EGIInet                              = edict()
-__C.NETWORK.EGIInet.embed_dim                    = 192
-__C.NETWORK.EGIInet.depth                        = 6
-__C.NETWORK.EGIInet.img_patch_size               = 14
-__C.NETWORK.EGIInet.pc_sample_rate               = 0.125
-__C.NETWORK.EGIInet.pc_sample_scale              = 2
-__C.NETWORK.EGIInet.fuse_layer_num               = 2
+__C.NETWORK.LEGACY                              = edict()
+__C.NETWORK.LEGACY.embed_dim                    = 256
+__C.NETWORK.LEGACY.depth                        = 6
+__C.NETWORK.LEGACY.img_patch_size               = 14
+__C.NETWORK.LEGACY.pc_sample_rate               = 0.125
+__C.NETWORK.LEGACY.pc_sample_scale              = 2
+__C.NETWORK.LEGACY.fuse_layer_num               = 2
 __C.NETWORK.shared_encoder                       = edict()
 __C.NETWORK.shared_encoder.block_head            = 12
 __C.NETWORK.shared_encoder.pc_h_hidden_dim       = 192
@@ -59,22 +59,17 @@ __C.TEST                                         = edict()
 __C.TEST.METRIC_NAME                             = 'ChamferDistance'
 __C.TEST.CATE                                    = 'plane'
 __C.TEST.BATCH_SIZE                              = 8
-__C.CONST.WEIGHTS = r"/data16t/yzj/datasets/EGIInet-checkpoints/plane-ckpt-best.pth"
+# Old reconstruction checkpoints are incompatible with the new encoders.
+# Set __C.CONST.WEIGHTS only for a checkpoint from this architecture.
 
-# Conditional latent flow: 1024 observed + 1024 generated = 2048 points.
-__C.NETWORK.FLOW = edict()
-__C.NETWORK.FLOW.PARTIAL_POINTS = 1024
-__C.NETWORK.FLOW.MISSING_POINTS = 1024
-__C.NETWORK.FLOW.LATENT_TOKENS = 64
-__C.NETWORK.FLOW.HEADS = 6
-__C.NETWORK.FLOW.DEPTH = 3
-__C.NETWORK.FLOW.TRAIN_STEPS = 4
-__C.NETWORK.FLOW.SAMPLE_STEPS = 16
-__C.TRAIN.FLOW_WEIGHT = 1.0
-__C.TRAIN.MISSING_WEIGHT = 1.0
-__C.TRAIN.AUTOENCODER_WEIGHT = 1.0
-__C.TRAIN.STYLE_WEIGHT = 0.01
-# Resume only checkpoints produced by the new architecture.
-__C.TRAIN.RESUME = None
-__C.DATASETS.SHAPENET.TRAIN_LIST = 'train_list.txt'
-__C.DATASETS.SHAPENET.TEST_LIST = 'test_list.txt'
+# Independent DINOv2 / PointNet++ condition encoders.
+__C.NETWORK.CONDITION = edict()
+__C.NETWORK.CONDITION.HEADS = 8
+__C.NETWORK.CONDITION.POINT_COUNTS = (512, 128)
+__C.NETWORK.CONDITION.POINT_RADII = (0.1, 0.2)  # Dataset coordinate units.
+__C.NETWORK.CONDITION.NEIGHBORS = 32
+__C.NETWORK.CONDITION.POINT_DEPTH = 2
+__C.NETWORK.CONDITION.DINO_FROZEN = True
+__C.NETWORK.CONDITION.DINO_REPO = 'facebookresearch/dinov2'
+__C.NETWORK.CONDITION.DINO_SOURCE = 'github'  # 'local' for an offline checkout.
+__C.NETWORK.CONDITION.DINO_WEIGHTS = None  # Raw official ViT-S/14 state_dict.
