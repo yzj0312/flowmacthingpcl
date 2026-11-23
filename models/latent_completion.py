@@ -15,24 +15,35 @@ def chamfer_loss(prediction, target):
 
 
 @torch.no_grad()
-def extract_missing_region(gt, partial, threshold=0.03, count=1024):
+def extract_missing_region(gt, partial, threshold=0.03, count=1024, chunk_size=512):
     """Threshold GT-to-observation distance, FPS downsample or repeat to fixed size.
 
     Coordinates MUST share scale/frame. Empty candidate sets raise instead of
     silently inventing missing geometry. Threshold is in dataset coordinate units.
     """
+    if not isinstance(chunk_size, int) or isinstance(chunk_size, bool) or chunk_size < 1:
+        raise ValueError('chunk_size must be a positive integer')
     if threshold <= 0 or count < 1:
         raise ValueError('threshold/count must be positive')
     if (gt.ndim != 3 or partial.ndim != 3 or gt.shape[-1] != 3
             or partial.shape[-1] != 3 or gt.shape[0] != partial.shape[0]
-            or min(gt.shape[1], partial.shape[1]) < 1):
+            or min(gt.shape[0], gt.shape[1], partial.shape[1]) < 1):
         raise ValueError('expected nonempty paired [B,N,3] clouds')
-    distance = torch.cdist(gt, partial).amin(-1)
     regions = []
-    for points, distances in zip(gt, distance):
+    # Never allocate a dataset-sized pairwise matrix. Bound both point axes.
+    for sample_index, (points, observed) in enumerate(zip(gt, partial)):
+        minimums = []
+        for query in points.split(chunk_size):
+            nearest = query.new_full((query.shape[0],), float('inf'))
+            for support in observed.split(chunk_size):
+                block = torch.cdist(query[None], support[None],
+                                    compute_mode='donot_use_mm_for_euclid_dist')[0]
+                nearest = torch.minimum(nearest, block.amin(-1))
+            minimums.append(nearest)
+        distances = torch.cat(minimums)
         candidates = points[distances > threshold]
         if candidates.shape[0] == 0:
-            raise ValueError('No missing candidates; inspect threshold/alignment or filter sample')
+            raise ValueError(f'No missing candidates for batch sample {sample_index}; inspect threshold/alignment or filter sample')
         if candidates.shape[0] >= count:
             region = index_points(candidates[None], fps_indices(candidates[None], count))[0]
         else:
